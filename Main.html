@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PlateVision - AI Plate Analysis</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+        header {
+            background-color: #333;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            width: 100%;
+        }
+        h1 {
+            margin: 0;
+        }
+        main {
+            background-color: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 20px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #webcam-container1, #webcam-container2 {
+            margin-top: 20px;
+            display: inline-block;
+            width: 200px;
+        }
+        #label-container div {
+            margin-top: 10px;
+            font-size: 16px;
+            color: #333;
+        }
+        footer {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #777;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>PlateVision</h1>
+        <p>AI-Powered Plate Analysis to Reduce Food Waste</p>
+    </header>
+
+    <main>
+        <h2>Start Analyzing Plates</h2>
+        <p>Click the button below to activate the AI model and webcams for real-time plate analysis.</p>
+        
+        <button id="start-button" type="button" onclick="toggle()">Start</button>
+        
+        <!-- Webcam containers -->
+        <div id="webcam-container1"></div>
+        <div id="webcam-container2"></div>
+        <div id="label-container"></div>
+    </main>
+    
+    <footer>
+        © 2024 PlateVision. All Rights Reserved.
+    </footer>
+
+    <!-- Scripts for TensorFlow and Teachable Machine -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+    <script type="text/javascript">
+        const URL = "https://teachablemachine.withgoogle.com/models/8_Tqw7oHl/"; // Model URL
+        let model, webcam1, webcam2, labelContainer, maxPredictions;
+        let photoCount = 0; // Counter for photo names
+        let canCapture = true; // Flag to control image capture timing
+        let isRunning = false; // Flag to control start/stop state
+
+        async function init() {
+            const modelURL = URL + "model.json";
+            const metadataURL = URL + "metadata.json";
+
+            // Load the model and metadata
+            model = await tmImage.load(modelURL, metadataURL);
+            maxPredictions = model.getTotalClasses();
+
+            // Setup webcams
+            const constraints1 = {
+                video: {
+                    facingMode: "user", // For the analysis webcam
+                    width: { ideal: 200 },
+                    height: { ideal: 200 },
+                }
+            };
+
+            const constraints2 = {
+                video: {
+                    facingMode: "environment", // For the capturing webcam
+                    width: { ideal: 200 },
+                    height: { ideal: 200 },
+                }
+            };
+
+            // Create new webcam instances
+            webcam1 = new tmImage.Webcam(200, 200, true); // Analysis webcam
+            webcam2 = new tmImage.Webcam(200, 200, true); // Capture webcam
+            await webcam1.setup(constraints1); // Request access to the first webcam
+            await webcam1.play();
+            await webcam2.setup(constraints2); // Request access to the second webcam
+            await webcam2.play();
+
+            window.requestAnimationFrame(loop);
+
+            // Append webcams and labels to the DOM
+            document.getElementById("webcam-container1").appendChild(webcam1.canvas);
+            document.getElementById("webcam-container2").appendChild(webcam2.canvas);
+            labelContainer = document.getElementById("label-container");
+            for (let i = 0; i < maxPredictions; i++) {
+                labelContainer.appendChild(document.createElement("div"));
+            }
+        }
+
+        async function loop() {
+            webcam1.update(); // Update the analysis webcam frame
+            webcam2.update(); // Update the capturing webcam frame
+            await predict();
+            window.requestAnimationFrame(loop);
+        }
+
+        // Run the analysis webcam image through the image model
+        async function predict() {
+            const prediction = await model.predict(webcam1.canvas);
+
+            for (let i = 0; i < maxPredictions; i++) {
+                const classPrediction = prediction[i].className + ": " + prediction[i].probability.toFixed(2);
+                labelContainer.childNodes[i].innerHTML = classPrediction;
+
+                // Log the contents of the label container to the console
+                console.log(`Label ${i}:`, classPrediction);
+
+                // Check if the "Leftover food" class probability exceeds 0.80
+                if (prediction[i].className === "Leftover food" && canCapture && prediction[i].probability > 0.80) {
+                    captureImage();
+                }
+            }
+        }
+
+        function captureImage() {
+            const canvas = webcam2.canvas; // Capture image from the second webcam
+            const imageData = canvas.toDataURL("image/png");
+
+            // Create a link element to download the image
+            const downloadLink = document.createElement("a");
+            downloadLink.href = imageData;
+            downloadLink.download = `photo_${photoCount++}.png`; // Incrementing photo name
+            downloadLink.click(); // Trigger the download
+            
+            // Alert the user that an image has been clicked
+            alert("Image clicked");
+
+            // Set the flag to false and wait 5 seconds before allowing another capture
+            canCapture = false;
+            setTimeout(() => {
+                canCapture = true;
+            }, 5000); // 5000 milliseconds = 5 seconds
+        }
+
+        function toggle() {
+            const button = document.getElementById("start-button");
+            if (isRunning) {
+                // Stop the program
+                stop();
+                button.innerText = "Start";
+            } else {
+                // Start the program
+                init();
+                button.innerText = "Stop";
+            }
+            isRunning = !isRunning; // Toggle the running state
+        }
+
+        function stop() {
+            // Stop the webcam and reset the application state
+            webcam1.stop();
+            webcam2.stop();
+            labelContainer.innerHTML = ''; // Clear the labels
+            photoCount = 0; // Reset photo count
+            canCapture = true; // Reset capture flag
+        }
+
+    </script>
+</body>
+</html>
