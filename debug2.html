@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Selector</title>
+    <script>
+        async function getCameras() {
+            try {
+                // Request camera permissions
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                const videoTracks = stream.getVideoTracks();
+                
+                // Get list of available devices
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const cameraSelect = document.getElementById('cameraSelect');
+
+                // Clear previous options
+                cameraSelect.innerHTML = '';
+
+                // Filter for video input devices (cameras)
+                const cameras = devices.filter(device => device.kind === 'videoinput');
+
+                // Populate the select element with available cameras
+                cameras.forEach(camera => {
+                    const option = document.createElement('option');
+                    option.value = camera.deviceId;
+                    option.textContent = camera.label || `Camera ${camera.deviceId}`;
+                    cameraSelect.appendChild(option);
+                });
+                
+                // Stop the video stream
+                videoTracks.forEach(track => track.stop());
+            } catch (error) {
+                console.error('Error accessing cameras:', error);
+            }
+        }
+    </script>
+</head>
+<body onload="getCameras()">
+    <h1>Select a Camera</h1>
+    <select id="cameraSelect">
+        <option value="">Loading cameras...</option>
+    </select>
+</body>
+</html>

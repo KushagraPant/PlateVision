@@ -71,7 +71,10 @@
 
     <main>
         <h2>Start Analyzing Plates</h2>
-        <p>Click the button below to activate the AI model and webcam for real-time plate analysis.</p>
+        <p>Select a camera and click the button below to activate the AI model and webcam for real-time plate analysis.</p>
+
+        <label for="camera-select">Choose a camera:</label>
+        <select id="camera-select"></select>
         
         <button type="button" onclick="init()">Start</button>
         
@@ -89,11 +92,10 @@
     <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
 
     <script type="text/javascript">
-        const URL = "https://teachablemachine.withgoogle.com/models/8_Tqw7oHl/";
-
+        const URL = "https://teachablemachine.withgoogle.com/models/8_Tqw7oHl/"; // Model URL
         let model, webcam, labelContainer, maxPredictions;
+        let photoCount = 0; // Counter for photo names
 
-        // Load the image model and setup the webcam
         async function init() {
             const modelURL = URL + "model.json";
             const metadataURL = URL + "metadata.json";
@@ -102,10 +104,19 @@
             model = await tmImage.load(modelURL, metadataURL);
             maxPredictions = model.getTotalClasses();
 
-            // Setup webcam
-            const flip = true; // whether to flip the webcam
-            webcam = new tmImage.Webcam(200, 200, flip); // width, height, flip
-            await webcam.setup(); // request access to the webcam
+            // Setup webcam with selected camera
+            const selectedCamera = document.getElementById("camera-select").value; // Get selected camera ID
+            const constraints = {
+                video: {
+                    deviceId: { exact: selectedCamera }, // Use exact ID
+                    width: 200,
+                    height: 200,
+                }
+            };
+
+            // Create a new webcam instance
+            webcam = new tmImage.Webcam(200, 200, true); // width, height, flip
+            await webcam.setup(constraints); // Request access to the selected webcam
             await webcam.play();
             window.requestAnimationFrame(loop);
 
@@ -118,7 +129,7 @@
         }
 
         async function loop() {
-            webcam.update(); // update the webcam frame
+            webcam.update(); // Update the webcam frame
             await predict();
             window.requestAnimationFrame(loop);
         }
@@ -127,11 +138,46 @@
         async function predict() {
             const prediction = await model.predict(webcam.canvas);
             for (let i = 0; i < maxPredictions; i++) {
-                const classPrediction =
-                    prediction[i].className + ": " + prediction[i].probability.toFixed(2);
+                const classPrediction = prediction[i].className + ": " + prediction[i].probability.toFixed(2);
                 labelContainer.childNodes[i].innerHTML = classPrediction;
+
+                // Check if probability for leftovers exceeds 0.80
+                if (prediction[i].className === "leftovers" && prediction[i].probability > 0.80) {
+                    captureImage();
+                }
             }
         }
+
+        function captureImage() {
+            const canvas = webcam.canvas;
+            const imageData = canvas.toDataURL("image/png");
+
+            // Create a link element to download the image
+            const downloadLink = document.createElement("a");
+            downloadLink.href = imageData;
+            downloadLink.download = `photo_${photoCount++}.png`; // Incrementing photo name
+            downloadLink.click(); // Trigger the download
+        }
+
+        async function loadCameraDevices() {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(device => device.kind === 'videoinput');
+
+            videoDevices.forEach(device => {
+                const option = document.createElement("option");
+                option.value = device.deviceId; // Set the value to the device ID
+                option.textContent = device.label || `Camera ${cameraSelect.length + 1}`; // Use label or a default name
+                document.getElementById("camera-select").appendChild(option);
+            });
+
+            // Automatically select the first camera if available
+            if (videoDevices.length > 0) {
+                document.getElementById("camera-select").value = videoDevices[0].deviceId;
+            }
+        }
+
+        // Load camera devices on page load
+        window.onload = loadCameraDevices;
     </script>
 </body>
 </html>
